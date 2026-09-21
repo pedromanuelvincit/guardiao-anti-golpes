@@ -1,0 +1,10 @@
+* text=auto
+*.py text eol=lf
+*.md text eol=lf
+*.txt text eol=lf
+*.csv text eol=lf
+*.jsonl text eol=lf
+*.pdf binary
+*.bin binary
+*.sqlite3 binary
+*.duckdb binary

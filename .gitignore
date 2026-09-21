@@ -1,0 +1,34 @@
+# Segredos
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Dados brutos e bancos locais reproduzíveis
+data/raw/*
+!data/raw/.gitkeep
+*.duckdb
+!data/guardiao.duckdb
+*.duckdb.wal
+
+# Temporários
+tmp/
+
+# Materiais internos de acompanhamento e enunciado da disciplina
+AGENTS.md
+PROMPT_MESTRE_PROJETOS_GUIDE.md
+4d63f75c-3943-4e52-86e0-66d1dfdef9c2.pdf
+
+# Documentação acadêmica e pessoal mantida somente no computador
+docs/BASE_CONHECIMENTO_APRESENTACAO.md
+docs/CHECKLIST.md
+docs/OPCOES_DOMINIO.md
+docs/PLANO_MESTRE.md
+docs/REGISTRO_DECISOES.md
+docs/ROTEIRO_VIDEO.md
+docs/VIABILIDADE_GUARDIAO.md
