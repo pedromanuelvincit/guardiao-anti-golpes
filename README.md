@@ -114,6 +114,22 @@ As três cartilhas ficam em `data/documents/raw`. Gere novamente os chunks e o
 Na primeira execução, a biblioteca baixa o modelo multilíngue de embeddings. O
 aviso do Windows sobre suporte a links simbólicos não impede a indexação.
 
+### 3. Classificador de risco (Sprint 1)
+
+Treine e avalie o classificador local sem abrir nenhuma URL. Para persistir o
+vencedor da validação, informe explicitamente um caminho de saída:
+
+```powershell
+& ".\.venv\Scripts\python.exe" ".\scripts\train_model.py" --model-output ".\data\models\url_risk_model.joblib"
+```
+
+O arquivo salvo contém o modelo escolhido, as 25 colunas numéricas esperadas
+e o adaptador de entrada. O treinamento também compara limites de decisão na
+validação, sem usar o teste para escolher o limite. A aplicação carrega esse
+arquivo automaticamente;
+para usar outro caminho, defina `GUARDIAO_MODEL_PATH`. O carregador apenas
+analisa o texto da URL e não abre o endereço.
+
 ## Execução
 
 Mantenha o Ollama aberto e inicie a interface:
@@ -149,11 +165,15 @@ Os endereços dos exemplos estão neutralizados para evitar cliques acidentais.
 ```powershell
 & ".\.venv\Scripts\python.exe" ".\scripts\test_input_analysis.py"
 & ".\.venv\Scripts\python.exe" ".\scripts\test_duckdb_queries.py"
+& ".\.venv\Scripts\python.exe" ".\scripts\test_url_model.py"
 & ".\.venv\Scripts\python.exe" ".\scripts\test_rag_retrieval.py"
 & ".\.venv\Scripts\python.exe" ".\scripts\test_rag_ollama.py"
+& ".\.venv\Scripts\python.exe" ".\scripts\test_sprint2_structure.py"
 ```
 
-O último teste requer o Ollama aberto. As validações humanas e resultados
+O teste `test_sprint2_structure.py` valida as tools locais e a passagem de
+contexto entre as estruturas dos agentes, sem integrar Streamlit ou executar
+uma orquestração completa. O último teste requer o Ollama aberto. As validações humanas e resultados
 esperados estão na pasta `docs`.
 
 ## Dados e documentos

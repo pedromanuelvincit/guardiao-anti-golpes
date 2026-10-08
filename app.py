@@ -35,9 +35,18 @@ from guardiao.url_analysis import (
     extract_url_candidate,
     format_url_analysis,
 )
+from guardiao.url_model import (
+    DEFAULT_MODEL_PATH,
+    format_model_prediction,
+    load_model_bundle,
+    predict_url_risk,
+)
 
 
 TOP_K = int(os.getenv("RAG_TOP_K", "3"))
+MODEL_PATH = Path(os.getenv("GUARDIAO_MODEL_PATH", str(DEFAULT_MODEL_PATH)))
+if not MODEL_PATH.is_absolute():
+    MODEL_PATH = (PROJECT_ROOT / MODEL_PATH).resolve()
 
 
 def render_sources(
@@ -74,6 +83,24 @@ def render_sql(query_name: str) -> None:
     """Mostra a consulta controlada usada para produzir a resposta."""
     with st.expander("Consulta executada no DuckDB"):
         st.code(str(QUERY_DEFINITIONS[query_name]["sql"]).strip(), language="sql")
+
+
+def format_url_response(url: str) -> str:
+    """Combina a triagem textual com a previsão, quando o modelo existe."""
+    analysis = analyze_url(url)
+    response = format_url_analysis(analysis)
+    try:
+        bundle = load_model_bundle(MODEL_PATH)
+    except FileNotFoundError:
+        return (
+            response
+            + "\n\n---\n\n**Modelo preditivo ainda não carregado.** Execute o "
+            "treinamento com `--model-output` para habilitar esta estimativa."
+        )
+    prediction = predict_url_risk(url, bundle)
+    return response + "\n\n---\n\n" + format_model_prediction(
+        prediction, textual_signal_count=len(analysis["signals"])
+    )
 
 
 st.set_page_config(
@@ -127,7 +154,7 @@ if question:
         data_intent = detect_data_intent(question)
         message_candidate = extract_message_candidate(question)
         url_candidate = extract_url_candidate(question)
-        if data_intent:
+        if data_intent and not (message_candidate or url_candidate):
             try:
                 _, rows = run_named_query(data_intent)
                 response = format_query_answer(data_intent, rows)
@@ -148,9 +175,7 @@ if question:
                 response = format_message_analysis(message_result)
                 embedded_url = message_result.get("url")
                 if embedded_url:
-                    response += "\n\n---\n\n" + format_url_analysis(
-                        analyze_url(str(embedded_url))
-                    )
+                    response += "\n\n---\n\n" + format_url_response(str(embedded_url))
                 st.markdown(response)
                 st.session_state.messages.append(
                     {
@@ -163,7 +188,7 @@ if question:
                 st.error(f"Não foi possível analisar a mensagem: {error}")
         elif url_candidate:
             try:
-                response = format_url_analysis(analyze_url(url_candidate))
+                response = format_url_response(url_candidate)
                 st.markdown(response)
                 st.session_state.messages.append(
                     {
