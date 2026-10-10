@@ -12,6 +12,8 @@ from pathlib import Path
 from typing import Any
 
 from guardiao.data_queries import QUERY_DEFINITIONS, format_query_answer, run_named_query
+from guardiao.observability import trace
+from guardiao.rag import retrieve_contexts
 from guardiao.url_model import (
     DEFAULT_MODEL_PATH,
     load_model_bundle,
@@ -19,6 +21,7 @@ from guardiao.url_model import (
 )
 
 
+@trace("tool_predict_url_risk", kind="tool")
 def tool_predict_url_risk(
     url: str,
     model_path: Path | None = None,
@@ -48,6 +51,33 @@ def tool_predict_url_risk(
     }
 
 
+@trace("tool_search_security_guidelines", kind="tool")
+def tool_search_security_guidelines(
+    question: str,
+    top_k: int = 3,
+) -> dict[str, Any]:
+    """Busca orientações somente no índice ChromaDB local.
+
+    A pergunta é enviada ao índice persistido; nenhum endereço recuperado ou
+    informado pelo usuário é aberto, resolvido ou requisitado.
+    """
+    if not isinstance(question, str) or not question.strip():
+        raise ValueError("A pergunta deve ser um texto não vazio.")
+    if not isinstance(top_k, int) or isinstance(top_k, bool) or not 1 <= top_k <= 5:
+        raise ValueError("top_k deve ser um inteiro entre 1 e 5.")
+
+    contexts = retrieve_contexts(question, top_k=top_k)
+    return {
+        "tool": "tool_search_security_guidelines",
+        "question": question,
+        "top_k": top_k,
+        "contexts": contexts,
+        "sources": [context["metadata"] for context in contexts],
+        "network_accessed": False,
+    }
+
+
+@trace("tool_query_duckdb_stats", kind="tool")
 def tool_query_duckdb_stats(query_name: str) -> dict[str, Any]:
     """Executa apenas uma das consultas nomeadas e aprovadas do DuckDB.
 

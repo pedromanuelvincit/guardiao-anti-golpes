@@ -14,7 +14,9 @@ PREVENTIVE_ADVISOR_SYSTEM_PROMPT = """Você é o Orientador Preventivo do Guardi
 Receba a análise do Analista de Risco e consulte somente os trechos recuperados
 do ChromaDB. Organize ações preventivas presentes nesses trechos, cite as
 fontes por seus metadados e declare quando o contexto for insuficiente. Não
-invente procedimentos, fontes, resultados de ML ou garantias."""
+invente procedimentos, fontes, resultados de ML ou garantias. HTTPS ou um
+certificado não comprovam legitimidade e nunca devem ser apresentados como
+critério de segurança."""
 
 RISK_ANALYST_TO_ADVISOR_TEMPLATE = """ANÁLISE DO ANALISTA DE RISCO:
 {risk_analysis}

@@ -18,11 +18,11 @@ registrados na [Declaração CBL](docs/DECLARACAO_CBL.md).
 
 ## Funcionalidades
 
-- Chat em Streamlit com respostas progressivas e histórico da sessão.
-- LLM local `llama3.2:3b`, executado pela API do Ollama.
+- Chat em Streamlit com histórico da sessão e orientação final em linguagem simples.
+- Fluxo `Analista de Risco → Orientador Preventivo` com LLM local `llama3.2:3b` via Ollama.
 - RAG com três cartilhas do CERT.br, 44 chunks e índice ChromaDB.
-- Exibição de documento, página, chunk, distância vetorial e uso da fonte.
-- Duas consultas em linguagem natural a tabelas relacionadas no DuckDB.
+- Fontes consultadas exibidas em painel recolhível, sem links externos clicáveis.
+- Consulta estatística controlada a tabelas relacionadas no DuckDB.
 - Triagem local de mensagens e URLs, sem abrir os endereços.
 - Recusa de perguntas fora do escopo documental.
 
@@ -31,22 +31,24 @@ registrados na [Declaração CBL](docs/DECLARACAO_CBL.md).
 ```mermaid
 flowchart LR
     U[Usuário] --> UI[Chat Streamlit]
-    UI --> R{Roteamento}
-    R --> T[Triagem local de mensagem e URL]
-    R --> Q[Consultas controladas]
-    Q --> D[(DuckDB)]
-    R --> B[Verificação de escopo]
-    B --> V[Busca híbrida]
-    V --> C[(ChromaDB)]
-    C --> P[Prompt com contexto]
-    P --> L[Llama 3.2 3B via Ollama]
+    UI --> S{Entrada no escopo?}
+    S -->|URL| A[Analista de Risco]
+    A --> M[Modelo local]
+    A --> D[(DuckDB controlado)]
+    S -->|Mensagem| T[Triagem local]
+    M --> P[Orientador Preventivo]
+    D --> P
+    T --> P
+    P --> C[(ChromaDB)]
+    C --> L[Llama 3.2 3B via Ollama]
     L --> UI
 ```
 
-O roteamento é determinístico. As perguntas estatísticas são associadas a SQLs
-previamente aprovados; o modelo não recebe permissão para gerar ou executar SQL
-arbitrário. No RAG, a busca vetorial é combinada com termos da pergunta e apenas
-os trechos suficientemente relevantes são enviados ao modelo.
+As consultas estatísticas são associadas a SQLs previamente aprovados; o modelo
+não recebe permissão para gerar ou executar SQL arbitrário. O Orientador consulta
+as cartilhas locais antes de responder. Se o Ollama falhar ou produzir orientação
+insegura, a aplicação mostra uma orientação local de contingência. Em todos os
+casos, as URLs recebidas são tratadas apenas como texto e não são abertas.
 
 ## Pré-requisitos
 
@@ -74,6 +76,50 @@ ollama pull llama3.2:3b
 
 Os valores padrão de configuração estão documentados em `.env.example`. Como
 o projeto funciona sem chaves externas, nenhuma credencial precisa ser criada.
+
+### Observabilidade opcional (Sprint 3)
+
+O tracing local usa Langfuse apenas quando `LANGFUSE_PUBLIC_KEY` e
+`LANGFUSE_SECRET_KEY` estão definidas. `LANGFUSE_HOST` é opcional e assume
+`https://cloud.langfuse.com`; sem as chaves ou sem a biblioteca instalada, o
+fluxo permanece em modo no-op e não imprime segredos.
+
+No PowerShell, configure somente na sessão atual (substitua os valores fora do
+repositório):
+
+```powershell
+$env:LANGFUSE_PUBLIC_KEY = "pk-lf-..."
+$env:LANGFUSE_SECRET_KEY = "sk-lf-..."
+$env:LANGFUSE_HOST = "https://cloud.langfuse.com"
+```
+
+Valide sem integrar Streamlit:
+
+```powershell
+& ".\.venv\Scripts\python.exe" ".\scripts\test_observability.py"
+```
+
+O script informa `Tracing Langfuse: ativo` ou `inativo`, executa o workflow
+RiskAnalyst → PreventiveAdvisor, preserva o fallback do Ollama e faz flush e
+encerramento ao final. Nunca copie chaves para o README, logs ou commits.
+
+### Golden Dataset e DeepEval (Sprint 3)
+
+O arquivo `data/golden_dataset.json` contém exatamente 15 casos: 5 diretos,
+4 em linguagem natural, 3 ambíguos/difíceis e 3 fora do escopo. A avaliação usa
+somente o Ollama local como juiz, sem fallback para OpenAI:
+
+```powershell
+& ".\\.venv\\Scripts\\python.exe" -m pip install -r requirements.txt
+& ".\\.venv\\Scripts\\python.exe" ".\\scripts\\test_deepeval.py" --structural-only
+& ".\\.venv\\Scripts\\python.exe" ".\\scripts\\test_deepeval.py"
+```
+
+A avaliação completa requer o Ollama em execução e usa `OLLAMA_HOST` (padrão
+`http://127.0.0.1:11434`) e `OLLAMA_MODEL` (padrão `llama3.2:3b`). Os três casos
+fora do escopo são verificados como recusa e não entram nas métricas RAG. As
+métricas `FaithfulnessMetric` e `AnswerRelevancyMetric` avaliam os 12 casos
+relacionados às cartilhas.
 
 ## Preparação dos componentes
 
@@ -169,12 +215,17 @@ Os endereços dos exemplos estão neutralizados para evitar cliques acidentais.
 & ".\.venv\Scripts\python.exe" ".\scripts\test_rag_retrieval.py"
 & ".\.venv\Scripts\python.exe" ".\scripts\test_rag_ollama.py"
 & ".\.venv\Scripts\python.exe" ".\scripts\test_sprint2_structure.py"
+& ".\.venv\Scripts\python.exe" ".\scripts\test_sprint2_workflow.py"
+& ".\.venv\Scripts\python.exe" ".\scripts\test_observability.py"
 ```
 
 O teste `test_sprint2_structure.py` valida as tools locais e a passagem de
-contexto entre as estruturas dos agentes, sem integrar Streamlit ou executar
-uma orquestração completa. O último teste requer o Ollama aberto. As validações humanas e resultados
-esperados estão na pasta `docs`.
+contexto entre as estruturas dos agentes. `test_sprint2_workflow.py` executa o
+fluxo RiskAnalyst -> PreventiveAdvisor, com Parecer Bruto, busca RAG e tentativa
+de resposta final via tool calling do Ollama. Sem Ollama, ele informa o
+fallback local baseado somente nos trechos recuperados. Nenhum dos testes
+integra Streamlit ou abre URLs. As validações humanas e resultados esperados
+estão na pasta `docs`.
 
 ## Dados e documentos
 

@@ -1,0 +1,112 @@
+{
+  "name": "Guardião Golden Dataset Sprint 3",
+  "version": "1.0",
+  "language": "pt-BR",
+  "cases": [
+    {
+      "id": "direto-01",
+      "category": "direto",
+      "question": "Como identificar um boleto falso?",
+      "expected_behavior": "Orientar a conferir valor, beneficiário, CNPJ e fornecedor por canal oficial.",
+      "scope": "rag"
+    },
+    {
+      "id": "direto-02",
+      "category": "direto",
+      "question": "O que fazer ao receber um link suspeito?",
+      "expected_behavior": "Recomendar não clicar, confirmar a origem por canal oficial e não informar dados.",
+      "scope": "rag"
+    },
+    {
+      "id": "direto-03",
+      "category": "direto",
+      "question": "Como me proteger de golpes no Pix?",
+      "expected_behavior": "Orientar a verificar destinatário, valor e instituição antes de confirmar.",
+      "scope": "rag"
+    },
+    {
+      "id": "direto-04",
+      "category": "direto",
+      "question": "Como agir se eu caí em um golpe?",
+      "expected_behavior": "Orientar interromper o contato, guardar evidências e procurar instituição e canais oficiais.",
+      "scope": "rag"
+    },
+    {
+      "id": "direto-05",
+      "category": "direto",
+      "question": "Devo pagar uma taxa extra por outro canal depois de uma compra?",
+      "expected_behavior": "Orientar a pagar somente na plataforma original e contatar a plataforma por canal oficial.",
+      "scope": "rag"
+    },
+    {
+      "id": "natural-01",
+      "category": "linguagem_natural",
+      "question": "Uma pessoa dizendo ser do banco pediu meu código recebido por SMS. O que eu faço?",
+      "expected_behavior": "Recomendar não compartilhar o código e confirmar o contato diretamente com o banco.",
+      "scope": "rag"
+    },
+    {
+      "id": "natural-02",
+      "category": "linguagem_natural",
+      "question": "Chegou uma mensagem urgente dizendo que minha conta será bloqueada e tem um botão para resolver.",
+      "expected_behavior": "Recomendar não usar o botão, não fornecer credenciais e acessar o serviço por canal oficial.",
+      "scope": "rag"
+    },
+    {
+      "id": "natural-03",
+      "category": "linguagem_natural",
+      "question": "Estou vendendo um produto e o comprador mandou um comprovante, mas o dinheiro não entrou.",
+      "expected_behavior": "Orientar conferir o saldo diretamente e não entregar o produto apenas por comprovante.",
+      "scope": "rag"
+    },
+    {
+      "id": "natural-04",
+      "category": "linguagem_natural",
+      "question": "Meu familiar pediu uma transferência pelo WhatsApp, mas a foto e o número parecem diferentes.",
+      "expected_behavior": "Orientar confirmar a identidade por outro canal antes de transferir dinheiro.",
+      "scope": "rag"
+    },
+    {
+      "id": "ambiguo-01",
+      "category": "ambiguo_dificil",
+      "question": "O site tem cadeado e HTTPS; posso confiar e informar meus dados?",
+      "expected_behavior": "Explicar que HTTPS isoladamente não garante legitimidade e recomendar confirmar o domínio e o canal oficial.",
+      "scope": "rag"
+    },
+    {
+      "id": "ambiguo-02",
+      "category": "ambiguo_dificil",
+      "question": "Recebi um QR Code de uma loja conhecida, mas a cobrança mostra outro recebedor. Posso pagar?",
+      "expected_behavior": "Recomendar não pagar até conferir o recebedor e confirmar a cobrança com a loja por canal oficial.",
+      "scope": "rag"
+    },
+    {
+      "id": "ambiguo-03",
+      "category": "ambiguo_dificil",
+      "question": "O endereço parece igual ao oficial, mas chegou por uma promoção com prazo de dez minutos.",
+      "expected_behavior": "Orientar não agir sob pressão, verificar o endereço completo e acessar a empresa por canal oficial.",
+      "scope": "rag"
+    },
+    {
+      "id": "fora-01",
+      "category": "fora_escopo",
+      "question": "Qual é a previsão do tempo para amanhã?",
+      "expected_behavior": "Recusar educadamente por estar fora do escopo das cartilhas de golpes digitais.",
+      "scope": "fora_do_rag"
+    },
+    {
+      "id": "fora-02",
+      "category": "fora_escopo",
+      "question": "Qual é a capital da Austrália?",
+      "expected_behavior": "Recusar educadamente por estar fora do escopo do projeto.",
+      "scope": "fora_do_rag"
+    },
+    {
+      "id": "fora-03",
+      "category": "fora_escopo",
+      "question": "Escreva uma receita de bolo de chocolate.",
+      "expected_behavior": "Recusar educadamente por estar fora do escopo do RAG de segurança digital.",
+      "scope": "fora_do_rag"
+    }
+  ]
+}

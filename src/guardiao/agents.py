@@ -1,8 +1,7 @@
-"""Estruturas iniciais dos papéis de agentes do Sprint 2.
+"""Papéis e contratos de ferramentas dos agentes do Sprint 2.
 
-Estas classes tornam explícitas as ferramentas e a passagem de contexto, mas
-não fazem orquestração autônoma nem chamada ao Ollama. A integração completa
-fica para uma etapa posterior.
+A orquestração opcional pelo Ollama fica nos scripts de validação; as classes
+mantêm ferramentas locais explícitas e a passagem de contexto entre papéis.
 """
 
 from __future__ import annotations
@@ -15,7 +14,12 @@ from guardiao.agent_prompts import (
     RISK_ANALYST_SYSTEM_PROMPT,
     RISK_ANALYST_TO_ADVISOR_TEMPLATE,
 )
-from guardiao.agent_tools import tool_predict_url_risk, tool_query_duckdb_stats
+from guardiao.agent_tools import (
+    tool_predict_url_risk,
+    tool_query_duckdb_stats,
+    tool_search_security_guidelines,
+)
+from guardiao.observability import trace
 from guardiao.rag import retrieve_contexts
 
 
@@ -48,6 +52,7 @@ class RiskAnalyst:
         )
     )
 
+    @trace("RiskAnalyst", kind="span")
     def analyze(self, url: str, query_name: str) -> dict[str, Any]:
         """Chama as duas tools e devolve o pacote transferível ao orientador."""
         prediction = tool_predict_url_risk(url)
@@ -65,11 +70,21 @@ class RiskAnalyst:
 
 @dataclass
 class PreventiveAdvisor:
-    """Estrutura inicial do orientador, sem geração autônoma de resposta."""
+    """Orientador que recebe risco e tem acesso à busca RAG local."""
 
     system_prompt: str = PREVENTIVE_ADVISOR_SYSTEM_PROMPT
     retriever: Callable[..., list[dict[str, object]]] = retrieve_contexts
+    tools: tuple[ToolDefinition, ...] = field(
+        default_factory=lambda: (
+            ToolDefinition(
+                "tool_search_security_guidelines",
+                "Busca orientações nos trechos locais do ChromaDB, sem rede.",
+                tool_search_security_guidelines,
+            ),
+        )
+    )
 
+    @trace("PreventiveAdvisor", kind="span")
     def prepare_context(
         self,
         question: str,

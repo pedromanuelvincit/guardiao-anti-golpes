@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 import sys
 from pathlib import Path
 
@@ -14,39 +13,15 @@ SRC_DIR = PROJECT_ROOT / "src"
 if str(SRC_DIR) not in sys.path:
     sys.path.insert(0, str(SRC_DIR))
 
-from guardiao.data_queries import (
-    QUERY_DEFINITIONS,
-    detect_data_intent,
-    format_query_answer,
-    run_named_query,
-)
-from guardiao.message_analysis import (
-    analyze_message,
-    extract_message_candidate,
-    format_message_analysis,
-)
-from guardiao.ollama_client import DEFAULT_MODEL, stream_chat
-from guardiao.formatting import extract_glossary, format_markdown_stream
-from guardiao.prompts import SYSTEM_PROMPT, build_user_prompt
-from guardiao.rag import retrieve_contexts, select_generation_contexts
+from guardiao.agent_workflow import run_agent_workflow
+from guardiao.message_analysis import analyze_message, extract_message_candidate
+from guardiao.observability import initialize_observability, tracing_status
+from guardiao.ollama_client import DEFAULT_MODEL
 from guardiao.scope import OUT_OF_SCOPE_RESPONSE, is_in_scope
-from guardiao.url_analysis import (
-    analyze_url,
-    extract_url_candidate,
-    format_url_analysis,
-)
-from guardiao.url_model import (
-    DEFAULT_MODEL_PATH,
-    format_model_prediction,
-    load_model_bundle,
-    predict_url_risk,
-)
+from guardiao.url_analysis import extract_url_candidate
 
 
-TOP_K = int(os.getenv("RAG_TOP_K", "3"))
-MODEL_PATH = Path(os.getenv("GUARDIAO_MODEL_PATH", str(DEFAULT_MODEL_PATH)))
-if not MODEL_PATH.is_absolute():
-    MODEL_PATH = (PROJECT_ROOT / MODEL_PATH).resolve()
+initialize_observability()
 
 
 def render_sources(
@@ -58,7 +33,7 @@ def render_sources(
             str(source["metadata"]["chunk_id"]) for source in sources
         }
 
-    with st.expander("Trechos recuperados"):
+    with st.expander("Fontes consultadas"):
         for index, source in enumerate(sources, start=1):
             metadata = source["metadata"]
             chunk_id = str(metadata["chunk_id"])
@@ -69,38 +44,9 @@ def render_sources(
             )
             st.markdown(
                 f"**Fonte {index}: {metadata['titulo']}**  \n"
-                f"Página {metadata['pagina']} · "
-                f"[Abrir documento]({metadata['url_documento']})"
+                f"Página {metadata['pagina']}"
             )
-            st.caption(
-                f"{status} · Chunk {chunk_id} · "
-                f"distância vetorial {source['distance']:.4f} · "
-                f"termos da pergunta {source.get('lexical_coverage', 0):.0%}"
-            )
-
-
-def render_sql(query_name: str) -> None:
-    """Mostra a consulta controlada usada para produzir a resposta."""
-    with st.expander("Consulta executada no DuckDB"):
-        st.code(str(QUERY_DEFINITIONS[query_name]["sql"]).strip(), language="sql")
-
-
-def format_url_response(url: str) -> str:
-    """Combina a triagem textual com a previsão, quando o modelo existe."""
-    analysis = analyze_url(url)
-    response = format_url_analysis(analysis)
-    try:
-        bundle = load_model_bundle(MODEL_PATH)
-    except FileNotFoundError:
-        return (
-            response
-            + "\n\n---\n\n**Modelo preditivo ainda não carregado.** Execute o "
-            "treinamento com `--model-output` para habilitar esta estimativa."
-        )
-    prediction = predict_url_risk(url, bundle)
-    return response + "\n\n---\n\n" + format_model_prediction(
-        prediction, textual_signal_count=len(analysis["signals"])
-    )
+            st.caption(status)
 
 
 st.set_page_config(
@@ -119,10 +65,11 @@ with st.sidebar:
     st.subheader("Como funciona")
     st.markdown(
         f"- **Modelo local:** `{DEFAULT_MODEL}`\n"
-        f"- **Busca:** {TOP_K} trechos no ChromaDB\n"
-        "- **Dados:** consultas controladas no DuckDB\n"
-        "- **Triagem:** mensagens e URLs sem acesso à rede"
+        "- **Fluxo:** Analista de Risco → Orientador Preventivo\n"
+        "- **Fontes:** cartilhas locais do CERT.br\n"
+        "- **Segurança:** mensagens e URLs são analisadas sem acesso à rede"
     )
+    st.caption(tracing_status())
     st.caption(
         "Exemplos: “Analise esta mensagem: ...” ou “Analise esta URL: ...”."
     )
@@ -141,8 +88,6 @@ for message in st.session_state.messages:
                 message["sources"],
                 set(message.get("used_source_ids", [])) or None,
             )
-        if message["role"] == "assistant" and message.get("data_query_name"):
-            render_sql(str(message["data_query_name"]))
 
 question = st.chat_input("Faça uma pergunta ou peça a análise de uma mensagem ou URL")
 if question:
@@ -151,86 +96,45 @@ if question:
         st.markdown(question)
 
     with st.chat_message("assistant"):
-        data_intent = detect_data_intent(question)
         message_candidate = extract_message_candidate(question)
         url_candidate = extract_url_candidate(question)
-        if data_intent and not (message_candidate or url_candidate):
-            try:
-                _, rows = run_named_query(data_intent)
-                response = format_query_answer(data_intent, rows)
-                st.markdown(response)
-                render_sql(data_intent)
-                st.session_state.messages.append(
-                    {
-                        "role": "assistant",
-                        "content": response,
-                        "data_query_name": data_intent,
-                    }
-                )
-            except Exception as error:
-                st.error(f"Não foi possível consultar o DuckDB: {error}")
-        elif message_candidate:
-            try:
-                message_result = analyze_message(message_candidate)
-                response = format_message_analysis(message_result)
-                embedded_url = message_result.get("url")
-                if embedded_url:
-                    response += "\n\n---\n\n" + format_url_response(str(embedded_url))
-                st.markdown(response)
-                st.session_state.messages.append(
-                    {
-                        "role": "assistant",
-                        "content": response,
-                        "analysis_type": "message",
-                    }
-                )
-            except Exception as error:
-                st.error(f"Não foi possível analisar a mensagem: {error}")
-        elif url_candidate:
-            try:
-                response = format_url_response(url_candidate)
-                st.markdown(response)
-                st.session_state.messages.append(
-                    {
-                        "role": "assistant",
-                        "content": response,
-                        "analysis_type": "url",
-                    }
-                )
-            except Exception as error:
-                st.error(f"Não foi possível analisar a URL: {error}")
-        elif not is_in_scope(question):
-            st.markdown(OUT_OF_SCOPE_RESPONSE)
-            st.session_state.messages.append(
-                {"role": "assistant", "content": OUT_OF_SCOPE_RESPONSE}
-            )
+        if not (url_candidate or message_candidate or is_in_scope(question)):
+            response = OUT_OF_SCOPE_RESPONSE
+            st.markdown(response)
+            st.session_state.messages.append({"role": "assistant", "content": response})
         else:
             try:
-                with st.spinner("Consultando as cartilhas..."):
-                    contexts = retrieve_contexts(question, top_k=TOP_K)
-                    generation_contexts = select_generation_contexts(contexts)
-                    user_prompt = build_user_prompt(question, generation_contexts)
-
-                response = st.write_stream(
-                    format_markdown_stream(
-                        stream_chat(
-                            SYSTEM_PROMPT, user_prompt, model=DEFAULT_MODEL
-                        ),
-                        prefix=extract_glossary(generation_contexts),
-                    )
+                message_analysis = (
+                    analyze_message(message_candidate) if message_candidate else None
                 )
-                used_source_ids = {
-                    str(context["metadata"]["chunk_id"])
-                    for context in generation_contexts
-                }
-                render_sources(contexts, used_source_ids)
+                activity = "🔍 Analisando URL..." if url_candidate else "🔍 Preparando orientação..."
+                with st.spinner(activity):
+                    result = run_agent_workflow(
+                        question,
+                        url=url_candidate,
+                        message_analysis=message_analysis,
+                    )
+
+                response = str(result["answer"])
+                st.markdown(response)
+                render_sources(
+                    list(result["sources"]),
+                    set(result["used_source_ids"]) or None,
+                )
+                if result["fallback_used"]:
+                    st.info("A orientação foi gerada no modo local de contingência.")
                 st.session_state.messages.append(
                     {
                         "role": "assistant",
                         "content": response,
-                        "sources": contexts,
-                        "used_source_ids": sorted(used_source_ids),
+                        "sources": result["sources"],
+                        "used_source_ids": result["used_source_ids"],
                     }
                 )
-            except Exception as error:
-                st.error(f"Não foi possível gerar a resposta: {error}")
+            except Exception:
+                response = (
+                    "Não foi possível concluir a análise agora. Não abra links nem "
+                    "compartilhe dados; confirme a solicitação por um canal oficial."
+                )
+                st.error(response)
+                st.session_state.messages.append({"role": "assistant", "content": response})

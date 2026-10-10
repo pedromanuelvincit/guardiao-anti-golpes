@@ -11,6 +11,7 @@ if str(SRC_DIR) not in sys.path:
     sys.path.insert(0, str(SRC_DIR))
 
 from guardiao.agent_tools import tool_predict_url_risk, tool_query_duckdb_stats
+from guardiao.agent_workflow import _requires_safe_fallback
 from guardiao.agents import PreventiveAdvisor, RiskAnalyst
 
 
@@ -52,6 +53,9 @@ def main() -> None:
     assert prepared["risk_analysis"] is risk
     assert "Confirme a solicitação por canal oficial." in prepared["prompt"]
     assert seen == {"question": "O que devo fazer antes de pagar?", "top_k": 1}
+
+    assert _requires_safe_fallback("Use HTTPS e valide o certificado.") is True
+    assert _requires_safe_fallback("Confirme a solicitação por canal oficial.") is False
     print("Estrutura Sprint 2 validada: tools locais, DuckDB controlado e passagem de contexto.")
 
 
