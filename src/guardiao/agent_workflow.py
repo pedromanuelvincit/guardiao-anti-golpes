@@ -102,6 +102,25 @@ def _requires_safe_fallback(answer: str) -> bool:
     return "https" in normalized or "certificado" in normalized
 
 
+def _append_message_signals(
+    answer: str, risk_analysis: dict[str, Any]
+) -> str:
+    """Garante que sinais textuais observados acompanhem a resposta final."""
+    triage = risk_analysis.get("message_triage") or {}
+    signals = triage.get("signals", [])
+    if not isinstance(signals, list) or not signals:
+        return answer
+
+    lines = ["**Sinais observados na mensagem**", ""]
+    for signal in signals:
+        if isinstance(signal, dict):
+            name = signal.get("name")
+            description = signal.get("description")
+            if name and description:
+                lines.append(f"- **{name}:** {description}")
+    return answer + "\n\n" + "\n".join(lines)
+
+
 def _run_preventive_advisor(
     advisor: PreventiveAdvisor,
     risk_analysis: dict[str, Any],
@@ -203,6 +222,7 @@ def run_agent_workflow(
         answer = _fallback_answer(risk_analysis)
         fallback_used = True
 
+    answer = _append_message_signals(answer, risk_analysis)
     used_source_ids = [
         str(context["metadata"]["chunk_id"])
         for context in contexts

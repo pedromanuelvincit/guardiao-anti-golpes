@@ -104,8 +104,17 @@ if question:
             st.session_state.messages.append({"role": "assistant", "content": response})
         else:
             try:
+                message_for_analysis = message_candidate
+                if (
+                    message_for_analysis is None
+                    and url_candidate
+                    and question.strip() != url_candidate.strip()
+                ):
+                    message_for_analysis = question
                 message_analysis = (
-                    analyze_message(message_candidate) if message_candidate else None
+                    analyze_message(message_for_analysis)
+                    if message_for_analysis
+                    else None
                 )
                 activity = "🔍 Analisando URL..." if url_candidate else "🔍 Preparando orientação..."
                 with st.spinner(activity):
