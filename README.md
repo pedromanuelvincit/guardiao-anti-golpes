@@ -20,10 +20,12 @@ registrados na [Declaração CBL](docs/DECLARACAO_CBL.md).
 
 - Chat em Streamlit com histórico da sessão e orientação final em linguagem simples.
 - Fluxo `Analista de Risco → Orientador Preventivo` com LLM local `llama3.2:3b` via Ollama.
+- Classificador local persistido em `data/models/url_risk_model.joblib`, treinado com separação por domínio.
 - RAG com três cartilhas do CERT.br, 44 chunks e índice ChromaDB.
 - Fontes consultadas exibidas em painel recolhível, sem links externos clicáveis.
 - Consulta estatística controlada a tabelas relacionadas no DuckDB.
-- Triagem local de mensagens e URLs, sem abrir os endereços.
+- Triagem automática de mensagens, sinais textuais e URLs, sem abrir os endereços.
+- Tracing opcional com Langfuse e avaliação com Golden Dataset/DeepEval.
 - Recusa de perguntas fora do escopo documental.
 
 ## Arquitetura
@@ -74,8 +76,16 @@ py -3.11 -m venv .venv
 ollama pull llama3.2:3b
 ```
 
-Os valores padrão de configuração estão documentados em `.env.example`. Como
-o projeto funciona sem chaves externas, nenhuma credencial precisa ser criada.
+Os valores padrão de configuração estão documentados em `.env.example`. Para
+criar sua configuração local, copie o arquivo sem enviar o `.env` ao GitHub:
+
+```powershell
+Copy-Item ".\.env.example" ".\.env"
+```
+
+O projeto funciona sem chaves externas; o Langfuse é opcional. Se usar o
+terminal integrado do VS Code, habilite `python.terminal.useEnvFile` para que
+as variáveis do `.env` sejam injetadas em novos terminais.
 
 ### Observabilidade opcional (Sprint 3)
 
@@ -208,24 +218,44 @@ Os endereços dos exemplos estão neutralizados para evitar cliques acidentais.
 
 ## Testes disponíveis
 
+### Validações locais sem Ollama
+
 ```powershell
 & ".\.venv\Scripts\python.exe" ".\scripts\test_input_analysis.py"
 & ".\.venv\Scripts\python.exe" ".\scripts\test_duckdb_queries.py"
 & ".\.venv\Scripts\python.exe" ".\scripts\test_url_model.py"
+& ".\.venv\Scripts\python.exe" ".\scripts\test_sprint2_structure.py"
+```
+
+### Validações que usam Ollama ou componentes do RAG
+
+Mantenha o Ollama em execução para os testes de workflow, observabilidade e
+resposta baseada no modelo local:
+
+```powershell
 & ".\.venv\Scripts\python.exe" ".\scripts\test_rag_retrieval.py"
 & ".\.venv\Scripts\python.exe" ".\scripts\test_rag_ollama.py"
-& ".\.venv\Scripts\python.exe" ".\scripts\test_sprint2_structure.py"
 & ".\.venv\Scripts\python.exe" ".\scripts\test_sprint2_workflow.py"
 & ".\.venv\Scripts\python.exe" ".\scripts\test_observability.py"
 ```
 
+### Avaliação DeepEval
+
+O dataset contém exatamente 15 casos: 5 diretos, 4 em linguagem natural, 3
+ambíguos/difíceis e 3 fora do escopo. Primeiro valide a estrutura e, depois,
+execute a avaliação completa:
+
+```powershell
+& ".\.venv\Scripts\python.exe" ".\scripts\test_deepeval.py" --structural-only
+& ".\.venv\Scripts\python.exe" ".\scripts\test_deepeval.py"
+```
+
 O teste `test_sprint2_structure.py` valida as tools locais e a passagem de
-contexto entre as estruturas dos agentes. `test_sprint2_workflow.py` executa o
-fluxo RiskAnalyst -> PreventiveAdvisor, com Parecer Bruto, busca RAG e tentativa
-de resposta final via tool calling do Ollama. Sem Ollama, ele informa o
-fallback local baseado somente nos trechos recuperados. Nenhum dos testes
-integra Streamlit ou abre URLs. As validações humanas e resultados esperados
-estão na pasta `docs`.
+contexto. `test_sprint2_workflow.py` executa o fluxo RiskAnalyst →
+PreventiveAdvisor, com Parecer Bruto, busca RAG e resposta final via tool
+calling do Ollama. Sem Ollama, o workflow usa uma orientação local de
+contingência. Os testes não abrem URLs nem integram serviços externos, exceto
+as chamadas locais ao Ollama e o envio opcional de traces ao Langfuse.
 
 ## Dados e documentos
 
@@ -260,29 +290,40 @@ Os documentos são disponibilizados pelo CERT.br/NIC.br sob
 
 ## Segurança e limitações
 
-- A aplicação não abre URLs informadas pelo usuário nem URLs do dataset.
+- A aplicação não abre, resolve por DNS nem requisita URLs informadas pelo
+  usuário ou presentes no dataset.
 - A triagem identifica padrões textuais; ela não comprova que um endereço é
   seguro ou malicioso.
+- O classificador local produz uma estimativa estatística baseada no dataset
+  PhiUSIIL; o score não é reputação de domínio e não confirma fraude ou
+  segurança.
 - O RAG responde somente com base nas três cartilhas selecionadas.
-- As consultas estruturadas cobrem duas intenções aprovadas para a demonstração.
-- O dataset possui vieses de coleta. Por exemplo, todos os exemplos legítimos
-  da amostra usam HTTPS; isso não torna HTTPS uma garantia de legitimidade.
+- As consultas estruturadas cobrem intenções aprovadas para a demonstração e
+  usam SQL read-only previamente definido.
+- O dataset possui vieses de coleta. Por exemplo, muitos exemplos legítimos da
+  amostra usam HTTPS; isso não torna HTTPS uma garantia de legitimidade.
 - O projeto não substitui banco, polícia, advogado ou atendimento oficial.
-- A classificação preditiva de novas URLs está reservada para a etapa futura de
-  aprendizado de máquina.
+- Sem credenciais do Langfuse, o tracing permanece desativado e a aplicação
+  continua funcionando localmente.
 
 ## Estrutura principal
 
 ```text
-app.py                         interface e roteamento
-src/guardiao/                  RAG, Ollama, consultas e triagem
-scripts/build_duckdb.py        criação reproduzível do DuckDB
-scripts/prepare_phiusiil.py    preparação segura dos CSVs
-scripts/prepare_rag.py         extração, chunking e indexação
-data/processed/                tabelas CSV processadas
-data/documents/raw/            três documentos do CERT.br
-data/chroma/                   índice vetorial local
-docs/                          decisões, validações e evidências
+app.py                              interface Streamlit
+src/guardiao/                       workflow, agentes, tools e componentes locais
+src/guardiao/agent_workflow.py      orquestração RiskAnalyst → PreventiveAdvisor
+src/guardiao/url_model.py           carregamento e inferência do classificador
+src/guardiao/observability.py       integração opcional com Langfuse
+scripts/train_model.py              treinamento e avaliação do modelo local
+scripts/build_duckdb.py             criação reproduzível do DuckDB
+scripts/prepare_phiusiil.py         preparação segura dos CSVs
+scripts/prepare_rag.py              extração, chunking e indexação
+data/models/                        bundle do classificador persistido
+data/processed/                     tabelas CSV processadas
+data/documents/raw/                 três documentos do CERT.br
+data/chroma/                        índice vetorial local
+data/golden_dataset.json            15 casos para avaliação DeepEval
+docs/                               decisões, validações e evidências
 ```
 
 ## Evidências de validação
